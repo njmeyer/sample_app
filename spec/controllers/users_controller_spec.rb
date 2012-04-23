@@ -27,8 +27,8 @@ describe UsersController do
     describe "as an admin user" do
 
       before(:each) do
-        admin = Factory(:user, :email => "admin@example.com", :admin => true)
-        test_sign_in(admin)
+        @admin = Factory(:user, :email => "admin@example.com", :admin => true)
+        test_sign_in(@admin)
       end
 
       it "should destroy the user" do
@@ -41,6 +41,15 @@ describe UsersController do
         delete :destroy, :id => @user
         response.should redirect_to(users_path)
       end
+
+      it "should not allow you to destroy yourself" do
+        lambda do
+          delete :destroy, :id => @admin
+        end.should change(User, :count).by(0)
+        response.should redirect_to(users_path)
+        flash[:notice].should =~ /cannot delete yourself/i
+      end
+
     end
 
   end
@@ -175,12 +184,32 @@ describe UsersController do
         end
       end
 
+      it "should not have any delete links" do
+        get :index
+        response.should_not have_selector("a", :content => "delete")
+      end
+      
       it "should paginate users" do
         get :index
         response.should have_selector("div.pagination")
         response.should have_selector("span.disabled", :content => "Previous")
         response.should have_selector("a", :href => "/users?page=2", :content => "2")
         response.should have_selector("a", :href => "/users?page=2", :content => "Next")
+      end
+
+      describe "who are administrators" do
+
+        before do
+          test_sign_in(Factory(:user, :admin => true, :email => Factory.next(:email)))
+        end
+
+        it "should have a delete link for each user" do
+          get :index
+          @users[0..2].each do |user|
+            response.should have_selector("a[title='Delete #{user.name}']")
+          end
+        end
+
       end
     end
 
@@ -275,6 +304,12 @@ describe UsersController do
     it "should have a password confirmation field" do
       get :new
       response.should have_selector("input[name='user[password_confirmation]'][type='password']")
+    end
+
+    it "should redirect to home for signed-in user" do
+      test_sign_in(Factory(:user))
+      get :new
+      response.should redirect_to root_path
     end
 
   end
